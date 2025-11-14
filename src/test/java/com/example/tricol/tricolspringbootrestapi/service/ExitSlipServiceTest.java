@@ -54,6 +54,17 @@ public class ExitSlipServiceTest {
         Tâche 1.1.C: Calcul de Valorisation
 
         testCalculateStockValue_withMultiplePrices()
+        *********************
+        Tâche 1.2 : Tests des Transitions de Statut
+        Tester les workflows de validation :
+
+        Vérifier que la validation d'un bon de sortie (passage de BROUILLON à VALIDÉ) déclenche automatiquement :
+
+        La création des mouvements de stock correspondants
+
+        La mise à jour des quantités restantes dans les lots
+
+        L'enregistrement des informations de validation (utilisateur, date)
     */
 
     @Mock
@@ -632,5 +643,78 @@ public class ExitSlipServiceTest {
         verify(productRepository, times(1)).findById(1L);
         verify(stockSlotRepository, times(1))
                 .findByProductAndAvailableQuantityGreaterThanOrderByEntryDateAsc(testProduct, 0.0);
+    }
+
+    // Tâche 1.2: Tests des Transitions de Statut
+    @Test
+    void testValidateExitSlip_StatusTransitionWorkflow() {
+        // Arrange: Create product
+        Product product = new Product();
+        product.setId(1L);
+        product.setReference("PROD-001");
+        product.setName("Test Product");
+        product.setCurrentStock(0.0);
+        product.setCategory("Category1");
+        product.setMeasureUnit("pcs");
+        product.setReorderPoint(10.0);
+        product.setUnitPrice(50.0);
+
+        // Create stock slot (simulates order reception)
+        StockSlot slot = new StockSlot();
+        slot.setId(1L);
+        slot.setProduct(product);
+        slot.setQuantity(100.0);
+        slot.setAvailableQuantity(100.0);
+        slot.setUnitPrice(50.0);
+        slot.setEntryDate(LocalDateTime.now().minusDays(1));
+        
+        // Update product stock after slot creation (simulates what happens in receiveOrder)
+        product.setCurrentStock(100.0);
+
+        // Create DRAFT exit slip
+        ExitSlip exitSlip = createMockExitSlip(1L, ExitSlipStatus.DRAFT);
+        ExitSlipItem item = new ExitSlipItem();
+        item.setProduct(product);
+        item.setRequestedQuantity(BigDecimal.valueOf(30.0));
+        item.setExitSlip(exitSlip);
+        exitSlip.setItems(List.of(item));
+
+        // Mock repositories
+        when(exitSlipRepository.findById(1L)).thenReturn(Optional.of(exitSlip));
+        when(stockSlotRepository.findByProductAndAvailableQuantityGreaterThanOrderByEntryDateAsc(product, 0.0))
+                .thenReturn(List.of(slot));
+        when(stockSlotRepository.save(any(StockSlot.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(productRepository.save(any(Product.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(exitSlipRepository.save(any(ExitSlip.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(exitSlipMapper.toResponse(any(ExitSlip.class))).thenAnswer(inv -> createMockExitSlipResponse(inv.getArgument(0)));
+
+        // Act: Validate exit slip
+        ExitSlipResponse response = exitSlipService.validateExitSlip(1L);
+
+        // Assert 1: Status transition DRAFT -> VALIDATED
+        assertEquals(ExitSlipStatus.VALIDATED, response.getStatus(), "Status should be VALIDATED");
+
+        // Assert 2: Validation metadata recorded
+        assertNotNull(exitSlip.getValidatedAt(), "Validation timestamp should be set");
+        assertNotNull(exitSlip.getValidatedBy(), "Validation user should be set");
+        assertEquals("SYSTEM", exitSlip.getValidatedBy(), "Validated by should be SYSTEM");
+
+        // Assert 3: Stock movements created
+        ArgumentCaptor<StockMovement> movementCaptor = ArgumentCaptor.forClass(StockMovement.class);
+        verify(stockMovementRepository, times(1)).save(movementCaptor.capture());
+        StockMovement movement = movementCaptor.getValue();
+        assertEquals(StockMovement.Type.out, movement.getType(), "Movement type should be OUT");
+        assertEquals(-30.0, movement.getQuantity(), 0.001, "Movement quantity should be negative");
+        assertEquals(product, movement.getProduct(), "Movement should reference product");
+        assertEquals(slot, movement.getStockSlot(), "Movement should reference stock slot");
+
+        // Assert 4: Stock slot quantities updated
+        assertEquals(70.0, slot.getAvailableQuantity(), 0.001, "Slot available quantity should be reduced");
+        verify(stockSlotRepository, times(1)).save(slot);
+
+        // Assert 5: Product stock updated
+        ArgumentCaptor<Product> productCaptor = ArgumentCaptor.forClass(Product.class);
+        verify(productRepository, times(1)).save(productCaptor.capture());
+        assertEquals(70.0, productCaptor.getValue().getCurrentStock(), 0.001, "Product stock should be reduced");
     }
 }
