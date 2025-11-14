@@ -4,6 +4,8 @@ import com.example.tricol.tricolspringbootrestapi.dto.request.CreateExitSlipRequ
 import com.example.tricol.tricolspringbootrestapi.dto.request.ExitSlipItemRequest;
 import com.example.tricol.tricolspringbootrestapi.dto.response.ExitSlipResponse;
 import com.example.tricol.tricolspringbootrestapi.enums.ExitSlipStatus;
+import com.example.tricol.tricolspringbootrestapi.exception.InsufficientStockException;
+import com.example.tricol.tricolspringbootrestapi.exception.ResourceNotFoundException;
 import com.example.tricol.tricolspringbootrestapi.mapper.ExitSlipMapper;
 import com.example.tricol.tricolspringbootrestapi.model.*;
 import com.example.tricol.tricolspringbootrestapi.repository.ExitSlipRepository;
@@ -44,7 +46,7 @@ public class ExitSlipServiceImpl implements ExitSlipService {
         // Add items
         for (ExitSlipItemRequest itemRequest : request.getItems()) {
             Product product = productRepository.findById(itemRequest.getProductId())
-                .orElseThrow(() -> new RuntimeException("Product not found: " + itemRequest.getProductId()));
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found: " + itemRequest.getProductId()));
             
             ExitSlipItem item = new ExitSlipItem();
             item.setExitSlip(exitSlip);
@@ -62,7 +64,7 @@ public class ExitSlipServiceImpl implements ExitSlipService {
     @Transactional
     public ExitSlipResponse validateExitSlip(Long id) {
         ExitSlip exitSlip = exitSlipRepository.findById(id)
-            .orElseThrow(() -> new RuntimeException("Exit slip not found: " + id));
+            .orElseThrow(() -> new ResourceNotFoundException("Exit slip not found: " + id));
         
         if (exitSlip.getStatus() != ExitSlipStatus.DRAFT) {
             throw new RuntimeException("Only DRAFT exit slips can be validated");
@@ -77,7 +79,7 @@ public class ExitSlipServiceImpl implements ExitSlipService {
                 .findByProductAndAvailableQuantityGreaterThanOrderByEntryDateAsc(product, 0.0);
             
             if (availableSlots.isEmpty()) {
-                throw new RuntimeException("Insufficient stock for product: " + product.getName());
+                throw new InsufficientStockException("Insufficient stock for product: " + product.getName());
             }
             
             double totalAvailable = availableSlots.stream()
@@ -85,7 +87,7 @@ public class ExitSlipServiceImpl implements ExitSlipService {
                 .sum();
             
             if (totalAvailable < quantityNeeded) {
-                throw new RuntimeException(
+                throw new InsufficientStockException(
                     String.format("Insufficient stock for product: %s. Required: %.2f, Available: %.2f",
                         product.getName(), quantityNeeded, totalAvailable)
                 );
@@ -141,7 +143,7 @@ public class ExitSlipServiceImpl implements ExitSlipService {
     @Transactional
     public ExitSlipResponse cancelExitSlip(Long id) {
         ExitSlip exitSlip = exitSlipRepository.findById(id)
-            .orElseThrow(() -> new RuntimeException("Exit slip not found: " + id));
+            .orElseThrow(() -> new ResourceNotFoundException("Exit slip not found: " + id));
         
         if (exitSlip.getStatus() == ExitSlipStatus.CANCELLED) {
             throw new RuntimeException("Exit slip is already cancelled");
@@ -161,7 +163,7 @@ public class ExitSlipServiceImpl implements ExitSlipService {
     
     public ExitSlipResponse getExitSlip(Long id) {
         ExitSlip exitSlip = exitSlipRepository.findById(id)
-            .orElseThrow(() -> new RuntimeException("Exit slip not found: " + id));
+            .orElseThrow(() -> new ResourceNotFoundException("Exit slip not found: " + id));
         return exitSlipMapper.toResponse(exitSlip);
     }
     
@@ -182,5 +184,21 @@ public class ExitSlipServiceImpl implements ExitSlipService {
         String date = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
         long count = exitSlipRepository.count() + 1;
         return String.format("%s-%s-%04d", prefix, date, count);
+    }
+
+    public double calculateStockValue(Long productId) {
+        Product product = productRepository.findById(productId)
+            .orElseThrow(() -> new ResourceNotFoundException("Product not found: " + productId));
+
+        List<StockSlot> stockSlots = stockSlotRepository
+            .findByProductAndAvailableQuantityGreaterThanOrderByEntryDateAsc(product, 0.0);
+
+        return stockSlots.stream()
+            .mapToDouble(slot -> {
+                double availableQty = slot.getAvailableQuantity() != null ? slot.getAvailableQuantity() : 0.0;
+                double price = slot.getUnitPrice() != null ? slot.getUnitPrice() : 0.0;
+                return availableQty * price;
+            })
+            .sum();
     }
 }

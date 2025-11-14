@@ -13,5 +13,7 @@ ExitSlipResponse cancelExitSlip(Long id);
 ExitSlipResponse getExitSlip(Long id);
 List<ExitSlipResponse> getAllExitSlips();
 List<ExitSlipResponse> getExitSlipsByStatus(ExitSlipStatus status);
-List<ExitSlipResponse> getExitSlipsByWorkshop(String workshop);    
+List<ExitSlipResponse> getExitSlipsByWorkshop(String workshop);
+
+double calculateStockValue(Long productId);
 } 
