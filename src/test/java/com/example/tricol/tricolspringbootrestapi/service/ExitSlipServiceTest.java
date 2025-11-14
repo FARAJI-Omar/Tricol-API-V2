@@ -421,5 +421,155 @@ public class ExitSlipServiceTest {
         return response;
     }
 
+    // Tâche 1.1.B: Création Automatique de Lot
+    @Test
+    void testProcessReception_createsLotAndMovement() {
+        // Arrange: Create an order with items
+        Supplier supplier = new Supplier();
+        supplier.setId(1L);
+        supplier.setSocialReason("Test Supplier");
 
+        Product product1 = new Product();
+        product1.setId(1L);
+        product1.setReference("PROD-001");
+        product1.setName("Product 1");
+        product1.setUnitPrice(50.0);
+        product1.setCurrentStock(0.0);
+        product1.setCategory("Category A");
+        product1.setMeasureUnit("pcs");
+        product1.setReorderPoint(10.0);
+
+        Product product2 = new Product();
+        product2.setId(2L);
+        product2.setReference("PROD-002");
+        product2.setName("Product 2");
+        product2.setUnitPrice(75.0);
+        product2.setCurrentStock(10.0);
+        product2.setCategory("Category B");
+        product2.setMeasureUnit("pcs");
+        product2.setReorderPoint(5.0);
+
+        Order order = new Order();
+        order.setId(1L);
+        order.setSupplier(supplier);
+        order.setStatus(Order.OrderStatus.pending);
+        order.setTotalAmount(500.0);
+
+        OrderItem item1 = new OrderItem();
+        item1.setId(1L);
+        item1.setOrder(order);
+        item1.setProduct(product1);
+        item1.setQuantity(50.0);
+        item1.setUnitPrice(50.0);
+        item1.setTotal(2500.0);
+
+        OrderItem item2 = new OrderItem();
+        item2.setId(2L);
+        item2.setOrder(order);
+        item2.setProduct(product2);
+        item2.setQuantity(20.0);
+        item2.setUnitPrice(75.0);
+        item2.setTotal(1500.0);
+
+        order.setItems(List.of(item1, item2));
+
+        // Mock repository behaviors
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(productRepository.save(any(Product.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(stockSlotRepository.saveAll(anyList())).thenAnswer(invocation -> {
+            List<StockSlot> slots = invocation.getArgument(0);
+            // Simulate @PrePersist (dateEntry) behavior and assign IDs
+            for (int i = 0; i < slots.size(); i++) {
+                StockSlot slot = slots.get(i);
+                slot.setId((long) (i + 1));
+                // Trigger @PrePersist (to set entry date manually since mocks don't trigger it
+                if (slot.getEntryDate() == null) {
+                    slot.setEntryDate(LocalDateTime.now());
+                }
+            }
+            return slots;
+        });
+        when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> {
+            StockMovement movement = invocation.getArgument(0);
+            movement.setId(1L);
+            return movement;
+        });
+
+        // Act: Receive the order (process reception)
+        orderService.receiveOrder(1L);
+
+        System.out.println(order.getStatus());
+        System.out.println(order.getItems());
+
+        // Assert: Verify order status changed to delivered
+        assertEquals(Order.OrderStatus.delivered, order.getStatus());
+
+        // Assert: Verify stock slots were saved
+        verify(stockSlotRepository, times(1)).saveAll(anyList());
+
+        // Assert: Verify the slots that were created and attached to the order
+        List<StockSlot> createdSlots = order.getStockSlot();
+        assertNotNull(createdSlots, "Stock slots should be attached to order");
+        assertEquals(2, createdSlots.size(), "Two stock slots should be created (one per order item)");
+
+        // Verify first slot properties
+        StockSlot createdSlot1 = createdSlots.get(0);
+        assertEquals(product1, createdSlot1.getProduct(), "Slot 1 should reference product 1");
+        assertEquals(50.0, createdSlot1.getQuantity(), 0.001, "Slot 1 quantity should match order item");
+        assertEquals(50.0, createdSlot1.getAvailableQuantity(), 0.001, "Slot 1 all quantity should be available");
+        assertEquals(50.0, createdSlot1.getUnitPrice(), 0.001, "Slot 1 price should match order item");
+        assertEquals(order, createdSlot1.getOrder(), "Slot 1 should reference the order");
+        assertNotNull(createdSlot1.getEntryDate(), "Slot 1 should have an entry date");
+
+        // Verify second slot properties
+        StockSlot createdSlot2 = createdSlots.get(1);
+        assertEquals(product2, createdSlot2.getProduct(), "Slot 2 should reference product 2");
+        assertEquals(20.0, createdSlot2.getQuantity(), 0.001, "Slot 2 quantity should match order item");
+        assertEquals(20.0, createdSlot2.getAvailableQuantity(), 0.001, "Slot 2 all quantity should be available");
+        assertEquals(75.0, createdSlot2.getUnitPrice(), 0.001, "Slot 2 price should match order item");
+        assertEquals(order, createdSlot2.getOrder(), "Slot 2 should reference the order");
+        assertNotNull(createdSlot2.getEntryDate(), "Slot 2 should have an entry date");
+
+        // Assert: Verify product stocks were updated (2 products)
+        ArgumentCaptor<Product> productCaptor = ArgumentCaptor.forClass(Product.class);
+        verify(productRepository, times(2)).save(productCaptor.capture());
+
+        List<Product> savedProducts = productCaptor.getAllValues();
+
+        savedProducts.forEach(System.out::println);
+
+        // Product 1 stock should increase from 0 to 50
+        assertEquals(50.0, savedProducts.get(0).getCurrentStock(), 0.001);
+        // Product 2 stock should increase from 10 to 30
+        assertEquals(30.0, savedProducts.get(1).getCurrentStock(), 0.001);
+
+        // Assert: Verify stock movements were created (2 movements of type IN)
+        ArgumentCaptor<StockMovement> movementCaptor = ArgumentCaptor.forClass(StockMovement.class);
+        verify(stockMovementRepository, times(2)).save(movementCaptor.capture());
+        List<StockMovement> savedMovements = movementCaptor.getAllValues();
+
+        // Verify first movement
+        StockMovement movement1 = savedMovements.get(0);
+        assertEquals(StockMovement.Type.in, movement1.getType());
+        assertEquals(50.0, movement1.getQuantity(), 0.001);
+        assertEquals(product1, movement1.getProduct());
+        assertNotNull(movement1.getStockSlot());
+        assertEquals(order, movement1.getOrder());
+
+        System.out.println(movement1.getType());
+
+        // Verify second movement
+        StockMovement movement2 = savedMovements.get(1);
+        assertEquals(StockMovement.Type.in, movement2.getType());
+        assertEquals(20.0, movement2.getQuantity(), 0.001);
+        assertEquals(product2, movement2.getProduct());
+        assertNotNull(movement2.getStockSlot());
+        assertEquals(order, movement2.getOrder());
+
+        System.out.println(movement2.getType());
+
+    }
+
+   
 }
