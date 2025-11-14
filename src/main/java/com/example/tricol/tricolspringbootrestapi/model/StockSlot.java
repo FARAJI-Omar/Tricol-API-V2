@@ -18,6 +18,9 @@ public class StockSlot {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(nullable = false, unique = true, length = 50)
+    private String lotNumber;
+
     private LocalDateTime entryDate;
     @PrePersist
     protected void onCreate(){entryDate = LocalDateTime.now();}

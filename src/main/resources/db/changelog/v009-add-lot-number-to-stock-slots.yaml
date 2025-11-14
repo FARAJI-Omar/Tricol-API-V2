@@ -1,0 +1,29 @@
+databaseChangeLog:
+  - changeSet:
+      id: v009-add-lot-number-to-stock-slots
+      author: omar
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: stock_slots
+                columnName: lot_number
+      changes:
+        - addColumn:
+            tableName: stock_slots
+            columns:
+              - column:
+                  name: lot_number
+                  type: VARCHAR(50)
+                  constraints:
+                    nullable: true
+                    unique: true
+        - sql:
+            sql: |
+              UPDATE stock_slots 
+              SET lot_number = CONCAT('LOT-', YEAR(CURDATE()), '-', LPAD(id, 3, '0')) 
+              WHERE lot_number IS NULL
+        - addNotNullConstraint:
+            tableName: stock_slots
+            columnName: lot_number
+            columnDataType: VARCHAR(50)
