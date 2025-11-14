@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 import java.math.BigDecimal;
 
@@ -20,6 +21,7 @@ public class ExitSlipItem {
     
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "exit_slip_id", nullable = false)
+    @ToString.Exclude
     private ExitSlip exitSlip;
     
     @ManyToOne(fetch = FetchType.LAZY)

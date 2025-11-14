@@ -6,6 +6,7 @@ import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -43,6 +44,7 @@ public class ExitSlip {
     private String comment;
     
     @OneToMany(mappedBy = "exitSlip", cascade = CascadeType.ALL, orphanRemoval = true)
+    @ToString.Exclude
     private List<ExitSlipItem> items = new ArrayList<>();
     
     @Column(nullable = false)
