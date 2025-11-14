@@ -61,4 +61,23 @@ public class Product {
 
     @OneToMany(mappedBy = "product")
     private List<StockMovement> stockMovements;
+
+    @Override
+    public String toString() {
+        return "Product{" +
+                "id=" + id +
+                ", reference='" + reference + '\'' +
+                ", name='" + name + '\'' +
+                ", description='" + description + '\'' +
+                ", unitPrice=" + unitPrice +
+                ", category='" + category + '\'' +
+                ", measureUnit='" + measureUnit + '\'' +
+                ", reorderPoint=" + reorderPoint +
+                ", currentStock=" + currentStock +
+                ", createdAt=" + createdAt +
+                ", commandItems=" + commandItems +
+                ", stockSlot=" + stockSlot +
+                ", stockMovements=" + stockMovements +
+                '}';
+    }
 }
