@@ -120,6 +120,7 @@ public class OrderServiceImpl implements OrderService {
 
         for (OrderItem orderItem : order.getItems()) {
             StockSlot stockSlot = new StockSlot();
+            stockSlot.setLotNumber(generateLotNumber());
             stockSlot.setOrder(order);
             stockSlot.setProduct(orderItem.getProduct());
             stockSlot.setQuantity(orderItem.getQuantity());
@@ -150,6 +151,12 @@ public class OrderServiceImpl implements OrderService {
         Order savedOrder = orderRepository.save(order);
 
         return orderMapper.toReceiveOrderResponse(savedOrder);
+    }
+
+    private String generateLotNumber() {
+        long count = stockSlotRepository.count() + 1;
+        int year = java.time.Year.now().getValue();
+        return String.format("LOT-%d-%03d", year, count);
     }
 
     private void saveStockMovementIn(StockSlot stockSlot){
