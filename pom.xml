@@ -9,7 +9,7 @@
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>com.example.tricol</groupId>
-    <artifactId>tricol-springboot-restapi</artifactId>
+    <artifactId>tricol-api-v2</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>tricol-springboot-restapi</name>
     <description>tricol-springboot-restapi</description>
