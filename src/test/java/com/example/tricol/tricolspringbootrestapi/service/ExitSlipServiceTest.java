@@ -571,5 +571,66 @@ public class ExitSlipServiceTest {
 
     }
 
-   
+    // Tâche 1.1.C: Calcul de Valorisation
+    @Test
+    void testCalculateStockValue_withMultiplePrices() {
+        // Arrange: Create a product with multiple stock slots at different prices
+        Product testProduct = new Product();
+        testProduct.setId(1L);
+        testProduct.setReference("TEST-001");
+        testProduct.setName("Test Product");
+        testProduct.setDescription("Test Description");
+        testProduct.setUnitPrice(100.0);
+        testProduct.setCategory("Test Category");
+        testProduct.setMeasureUnit("pcs");
+        testProduct.setReorderPoint(10.0);
+        testProduct.setCurrentStock(100.0);
+
+        // Create 3 stock slots with different quantities and prices
+        StockSlot slot1 = new StockSlot();
+        slot1.setId(1L);
+        slot1.setProduct(testProduct);
+        slot1.setQuantity(30.0);
+        slot1.setAvailableQuantity(30.0);
+        slot1.setUnitPrice(100.0);
+        slot1.setEntryDate(LocalDateTime.now().minusDays(3));
+
+        StockSlot slot2 = new StockSlot();
+        slot2.setId(2L);
+        slot2.setProduct(testProduct);
+        slot2.setQuantity(50.0);
+        slot2.setAvailableQuantity(50.0);
+        slot2.setUnitPrice(105.0);
+        slot2.setEntryDate(LocalDateTime.now().minusDays(2));
+
+        StockSlot slot3 = new StockSlot();
+        slot3.setId(3L);
+        slot3.setProduct(testProduct);
+        slot3.setQuantity(20.0);
+        slot3.setAvailableQuantity(20.0);
+        slot3.setUnitPrice(110.0);
+        slot3.setEntryDate(LocalDateTime.now().minusDays(1));
+
+        // Expected total value: 3,000 + 5,250 + 2,200 = 10,450
+        double expectedValue = (30.0 * 100.0) + (50.0 * 105.0) + (20.0 * 110.0);
+        System.out.println("Expected Stock Value: " + expectedValue);
+
+        // Mock repository behaviors
+        when(productRepository.findById(1L)).thenReturn(Optional.of(testProduct));
+        when(stockSlotRepository.findByProductAndAvailableQuantityGreaterThanOrderByEntryDateAsc(testProduct, 0.0))
+                .thenReturn(List.of(slot1, slot2, slot3));
+
+        // Act: Calculate stock value
+        double actualValue = exitSlipService.calculateStockValue(1L);
+        System.out.println("Calculated Stock Value: " + actualValue);
+
+        // Assert: Verify the total value is correctly calculated
+        assertEquals(expectedValue, actualValue, 0.01, "Stock value should be sum of (quantity × price) for all slots");
+        assertEquals(10450.0, actualValue, 0.01, "Stock value should be 10,450");
+
+        // Verify repository was called
+        verify(productRepository, times(1)).findById(1L);
+        verify(stockSlotRepository, times(1))
+                .findByProductAndAvailableQuantityGreaterThanOrderByEntryDateAsc(testProduct, 0.0);
+    }
 }
