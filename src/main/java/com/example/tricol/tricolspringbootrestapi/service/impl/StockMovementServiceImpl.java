@@ -6,11 +6,12 @@ import com.example.tricol.tricolspringbootrestapi.model.StockMovement;
 import com.example.tricol.tricolspringbootrestapi.repository.StockMovementRepository;
 import com.example.tricol.tricolspringbootrestapi.service.StockMovementService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -20,13 +21,14 @@ public class StockMovementServiceImpl implements StockMovementService {
     private final StockMovementMapper stockMovementMapper;
     
     @Override
-    public List<StockMovementResponse> searchMovements(
+    public Page<StockMovementResponse> searchMovements(
             LocalDateTime startDate, 
             LocalDateTime endDate, 
             Long productId, 
             String reference, 
             StockMovement.Type type,
-            String lotNumber) {
+            String lotNumber,
+            Pageable pageable) {
         
         Specification<StockMovement> spec = null;
         
@@ -54,8 +56,8 @@ public class StockMovementServiceImpl implements StockMovementService {
             spec = addSpec(spec, (root, query, cb) -> cb.equal(root.get("stockSlot").get("lotNumber"), lotNumber));
         }
         
-        List<StockMovement> movements = spec != null ? stockMovementRepository.findAll(spec) : stockMovementRepository.findAll();
-        return stockMovementMapper.toResponseList(movements);
+        Page<StockMovement> movements = spec != null ? stockMovementRepository.findAll(spec, pageable) : stockMovementRepository.findAll(pageable);
+        return movements.map(stockMovementMapper::toResponse);
     }
     
     private Specification<StockMovement> addSpec(Specification<StockMovement> spec, Specification<StockMovement> newSpec) {
